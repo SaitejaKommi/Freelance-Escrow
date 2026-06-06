@@ -1,0 +1,357 @@
+'use client';
+import { useState, useEffect, use } from 'react';
+import Link from 'next/link';
+import {
+  ArrowLeft, Play, Loader2, CheckCircle, Clock, GitBranch,
+  FileCode, GitCommit, Coins, ShieldCheck, AlertTriangle, Cpu,
+} from 'lucide-react';
+import { Sidebar } from '@/components/Sidebar';
+import type { Project, Milestone, Review, Payout } from '@/lib/types';
+
+type PageData = { project: Project; milestones: Milestone[]; repository: any; reviews: Review[]; payouts: Payout[] };
+
+const milestoneStatus: Record<string, { cls: string }> = {
+  'Completed':       { cls: 'badge-green'  },
+  'Mostly Complete': { cls: 'badge-cyan'   },
+  'Partial':         { cls: 'badge-amber'  },
+  'Not Started':     { cls: 'badge-orange' },
+};
+
+export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const [data,         setData]         = useState<PageData | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [auditing,     setAuditing]     = useState(false);
+  const [selectedEv,   setSelectedEv]   = useState<string | null>(null);
+  const [parsedEvidence, setParsedEvidence] = useState<Record<string, any>>({});
+  const [releasingId,  setReleasingId]  = useState<string | null>(null);
+
+  async function fetchData() {
+    const r = await fetch(`/api/projects/${id}`);
+    const d = await r.json();
+    if (!d.success) return;
+    setData(d.data);
+    if (d.data.reviews?.length > 0) {
+      try {
+        const ev = JSON.parse(d.data.reviews[0].evidence ?? '{}');
+        setParsedEvidence(ev);
+        if (!selectedEv && Object.keys(ev).length > 0) setSelectedEv(Object.keys(ev)[0]);
+      } catch { /* ignore */ }
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchData(); }, [id]);
+
+  async function triggerAudit() {
+    if (!data?.project || !data?.repository) return;
+    setAuditing(true);
+    window.location.href = `/visualizer?projectId=${id}&run=1`;
+  }
+
+  async function handlePayout(payoutId: string, action: 'approve' | 'refund') {
+    if (!confirm(`${action === 'approve' ? 'Approve release' : 'Refund'}? This will update the on-chain record.`)) return;
+    setReleasingId(payoutId);
+    try {
+      const res = await fetch('/api/payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payoutId, action }),
+      });
+      if (res.ok) {
+        if (action === 'approve') {
+          const { default: confetti } = await import('canvas-confetti');
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        }
+        fetchData();
+      }
+    } finally { setReleasingId(null); }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen font-sans" style={{ background: '#0e0c0a' }}>
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex items-center gap-3" style={{ color: '#5a5248' }}>
+            <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#DA7756' }} />
+            <span className="font-mono text-sm">Loading contract state…</span>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex h-screen font-sans" style={{ background: '#0e0c0a' }}>
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <AlertTriangle className="w-10 h-10 mx-auto mb-3" style={{ color: '#f87171' }} />
+            <p style={{ color: '#F5ECD7' }}>Project not found</p>
+            <Link href="/" className="btn-secondary mt-4 inline-flex">← Back</Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const { project, milestones, repository, reviews, payouts } = data;
+  const latestReview   = reviews[0] ?? null;
+  const pendingPayouts = payouts.filter(p => p.status === 'Pending');
+
+  return (
+    <div className="flex h-screen overflow-hidden font-sans" style={{ background: '#0e0c0a' }}>
+      <Sidebar />
+
+      <main className="flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-7 py-4"
+          style={{ background: 'rgba(14,12,10,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #2e2b26' }}>
+          <div className="flex items-center gap-4 min-w-0">
+            <Link href="/" className="btn-ghost px-2 py-1.5 text-xs">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Link>
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold truncate" style={{ color: '#F5ECD7' }}>{project.title}</h1>
+              <div className="flex items-center gap-3 mt-0.5">
+                <span className="badge badge-cyan text-xs">{project.escrow_status}</span>
+                {repository && (
+                  <a href={repository.github_url} target="_blank" rel="noreferrer"
+                    className="text-xs font-mono flex items-center gap-1" style={{ color: '#5a5248' }}>
+                    <GitBranch className="w-3 h-3" />
+                    {repository.owner}/{repository.repo}
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link href={`/visualizer?projectId=${id}`} className="btn-ghost text-xs">
+              <Cpu className="w-3.5 h-3.5" />
+              AI Monitor
+            </Link>
+            <button id="trigger-audit-btn"
+              onClick={triggerAudit}
+              disabled={auditing || !repository}
+              className="btn-primary text-sm px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
+              {auditing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Running…</> : <><Play className="w-3.5 h-3.5" /> Run AI Audit</>}
+            </button>
+          </div>
+        </div>
+
+        <div className="px-7 py-6 grid grid-cols-3 gap-6">
+
+          {/* ── Left: milestones + report ── */}
+          <div className="col-span-2 space-y-5">
+
+            {/* Contract stats */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Escrow Locked',   value: `${project.escrow_amount} MON`, color: '#67e8f9', icon: Coins       },
+                { label: 'Audit Score',      value: latestReview ? `${latestReview.score}%` : '—', color: '#DA7756', icon: ShieldCheck },
+                { label: 'Milestones',       value: `${milestones.filter(m => m.status === 'Completed').length}/${milestones.length}`, color: '#4ade80', icon: CheckCircle },
+              ].map(s => (
+                <div key={s.label} className="glass-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <s.icon className="w-4 h-4" style={{ color: s.color }} />
+                    <span className="text-xl font-bold font-mono" style={{ color: s.color }}>{s.value}</span>
+                  </div>
+                  <p className="text-xs" style={{ color: '#9a8f82' }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Pending payouts */}
+            {pendingPayouts.map(payout => (
+              <div key={payout.id} className="glass-card p-4 animate-slide-up"
+                style={{ borderColor: 'rgba(218,119,86,0.3)', boxShadow: '0 0 20px rgba(218,119,86,0.05)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: '#F5ECD7' }}>
+                      AI Settlement Recommendation
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#9a8f82' }}>
+                      Release <strong style={{ color: '#DA7756' }}>{payout.amount} MON</strong> ({payout.release_percentage}% of escrow)
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button id={`refund-${payout.id}`}
+                      onClick={() => handlePayout(payout.id, 'refund')}
+                      disabled={!!releasingId}
+                      className="btn-secondary text-xs px-3 py-1.5">
+                      {releasingId === payout.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Refund'}
+                    </button>
+                    <button id={`approve-${payout.id}`}
+                      onClick={() => handlePayout(payout.id, 'approve')}
+                      disabled={!!releasingId}
+                      className="btn-primary text-xs px-3 py-1.5">
+                      {releasingId === payout.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve Release'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Pixel divider */}
+            <div className="px-div" />
+
+            {/* Milestones */}
+            <div>
+              <h2 className="text-xs font-mono uppercase tracking-wider mb-3" style={{ color: '#5a5248' }}>
+                Milestone Breakdown
+              </h2>
+              <div className="space-y-2">
+                {milestones.map(m => {
+                  const cfg = milestoneStatus[m.status] ?? { cls: 'badge-orange' };
+                  return (
+                    <div key={m.id} className="glass-card glass-card-hover p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm" style={{ color: '#F5ECD7' }}>{m.title}</p>
+                          <p className="text-xs mt-0.5 line-clamp-1" style={{ color: '#9a8f82' }}>{m.description}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`badge ${cfg.cls}`}>{m.status}</span>
+                          <span className="font-mono text-xs font-bold" style={{ color: '#DA7756' }}>W:{m.weight}%</span>
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs mb-1" style={{ color: '#5a5248' }}>
+                          <span className="font-mono">completion</span>
+                          <span className="font-mono font-bold" style={{ color: m.completion >= 80 ? '#4ade80' : m.completion >= 40 ? '#fbbf24' : '#9a8f82' }}>
+                            {m.completion}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-sm overflow-hidden" style={{ background: '#141210', border: '1px solid #2e2b26' }}>
+                          <div className="progress-fill rounded-sm"
+                            style={{
+                              width:      `${m.completion}%`,
+                              background: m.completion >= 80 ? '#4ade80' : m.completion >= 40 ? '#fbbf24' : '#DA7756',
+                            }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Latest report */}
+            {latestReview && (
+              <div className="glass-card overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3"
+                  style={{ background: '#141210', borderBottom: '1px solid #2e2b26' }}>
+                  <FileCode className="w-4 h-4" style={{ color: '#DA7756' }} />
+                  <span className="font-medium text-sm" style={{ color: '#F5ECD7' }}>Audit Report</span>
+                  <span className="ml-auto badge badge-green">Confidence: {latestReview.confidence}%</span>
+                </div>
+                <div className="p-5 max-h-96 overflow-y-auto">
+                  <pre className="text-xs whitespace-pre-wrap leading-relaxed font-mono" style={{ color: '#9a8f82' }}>
+                    {latestReview.summary}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Right: Evidence explorer ── */}
+          <div className="space-y-4">
+            <div className="glass-card overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 py-3"
+                style={{ background: '#141210', borderBottom: '1px solid #2e2b26' }}>
+                <Cpu className="w-4 h-4" style={{ color: '#67e8f9' }} />
+                <span className="font-medium text-sm" style={{ color: '#F5ECD7' }}>Evidence Explorer</span>
+              </div>
+
+              {Object.keys(parsedEvidence).length === 0 ? (
+                <div className="p-8 text-center">
+                  <Clock className="w-8 h-8 mx-auto mb-2" style={{ color: '#5a5248' }} />
+                  <p className="text-xs font-mono" style={{ color: '#5a5248' }}>Run an AI audit to see code evidence</p>
+                </div>
+              ) : (
+                <div className="p-3">
+                  {/* Tabs */}
+                  <div className="space-y-0.5 mb-3">
+                    {Object.keys(parsedEvidence).map(title => {
+                      const ev = parsedEvidence[title];
+                      const isActive = selectedEv === title;
+                      return (
+                        <button key={title} onClick={() => setSelectedEv(title)}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-md text-left text-xs transition-all"
+                          style={{
+                            color:      isActive ? '#DA7756' : '#9a8f82',
+                            background: isActive ? 'rgba(218,119,86,0.08)' : 'transparent',
+                            border:     `1px solid ${isActive ? 'rgba(218,119,86,0.2)' : 'transparent'}`,
+                          }}>
+                          <span className="truncate font-mono">{title}</span>
+                          <span className={`badge flex-shrink-0 ml-1 ${ev.status === 'completed' ? 'badge-green' : ev.status === 'partial' ? 'badge-amber' : 'badge-orange'}`} style={{ fontSize: 9 }}>
+                            {ev.status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected evidence detail */}
+                  {selectedEv && parsedEvidence[selectedEv] && (
+                    <div className="space-y-3 pt-3" style={{ borderTop: '1px solid #2e2b26' }}>
+                      <p className="text-xs leading-relaxed italic" style={{ color: '#9a8f82' }}>
+                        "{parsedEvidence[selectedEv].reasoning}"
+                      </p>
+
+                      <div>
+                        <p className="text-xs font-mono uppercase tracking-wider mb-1.5 flex items-center gap-1" style={{ color: '#67e8f9' }}>
+                          <FileCode className="w-3 h-3" /> Verified Files
+                        </p>
+                        <div className="space-y-1">
+                          {parsedEvidence[selectedEv].files.length === 0
+                            ? <p className="text-xs font-mono" style={{ color: '#5a5248' }}>None found</p>
+                            : parsedEvidence[selectedEv].files.map((f: string) => (
+                              <div key={f} className="px-2 py-1 rounded text-xs font-mono truncate"
+                                style={{ background: '#141210', border: '1px solid #2e2b26', color: '#e8d5b8' }}>
+                                {f}
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-mono uppercase tracking-wider mb-1.5 flex items-center gap-1" style={{ color: '#DA7756' }}>
+                          <GitCommit className="w-3 h-3" /> Commits
+                        </p>
+                        <div className="space-y-1">
+                          {parsedEvidence[selectedEv].commits.length === 0
+                            ? <p className="text-xs font-mono" style={{ color: '#5a5248' }}>None matched</p>
+                            : parsedEvidence[selectedEv].commits.map((c: string) => (
+                              <div key={c} className="px-2 py-1 rounded text-xs font-mono"
+                                style={{ background: '#141210', border: '1px solid #2e2b26', color: '#9a8f82', wordBreak: 'break-all' }}>
+                                {c}
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer strip */}
+            <div className="text-xs font-mono px-3 py-2 rounded"
+              style={{ background: '#141210', border: '1px solid #201e1b', color: '#5a5248' }}>
+              <span>milestones: <span style={{ color: '#DA7756' }}>{milestones.length}</span></span>
+              {' · '}
+              <span>reviews: <span style={{ color: '#4ade80' }}>{reviews.length}</span></span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
