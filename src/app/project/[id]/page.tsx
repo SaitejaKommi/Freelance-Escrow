@@ -199,6 +199,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const { project, milestones, repository, reviews, payouts } = data;
   const latestReview   = reviews[0] ?? null;
   const pendingPayouts = payouts.filter(p => p.status === 'Pending');
+  const latestPendingPayout = pendingPayouts.length > 0
+    ? [...pendingPayouts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[pendingPayouts.length - 1]
+    : null;
   const ms             = milestones[selectedMs] ?? milestones[0];
   const done           = milestones.filter(m => m.status === 'Completed').length;
   const partial        = milestones.filter(m => m.status === 'Partial' || m.status === 'Mostly Complete').length;
@@ -320,8 +323,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </div>
 
             {/* Settlement recommendation panel */}
-            {pendingPayouts.map(payout => (
-              <div key={payout.id} className="card animate-slide-up" style={{ padding: '24px 28px', marginBottom: 22, overflow: 'hidden' }}>
+            {latestPendingPayout && (
+              <div className="card animate-slide-up" style={{ padding: '24px 28px', marginBottom: 22, overflow: 'hidden' }}>
                 <VerdictBanner approved={score >= 80} score={score} amount={fmt$(releaseAmt)} />
 
                 {/* Premium Recommendation Info Panel */}
@@ -363,28 +366,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                   <button
-                    id={`refund-${payout.id}`}
-                    onClick={() => handlePayout(payout.id, 'refund')}
+                    id={`refund-${latestPendingPayout.id}`}
+                    onClick={() => handlePayout(latestPendingPayout.id, 'refund')}
                     disabled={!!releasingId}
                     className="btn-secondary"
                     style={{ padding: '8px 16px' }}
                   >
-                    {releasingId === payout.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-3.5 h-3.5" /> Reject & Request Revisions</>}
+                    {releasingId === latestPendingPayout.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RotateCcw className="w-3.5 h-3.5" /> Reject & Request Revisions</>}
                   </button>
                   <button
-                    id={`approve-${payout.id}`}
-                    onClick={() => handlePayout(payout.id, 'approve')}
+                    id={`approve-${latestPendingPayout.id}`}
+                    onClick={() => handlePayout(latestPendingPayout.id, 'approve')}
                     disabled={!!releasingId}
                     className="btn-success"
                     style={{ padding: '9px 24px', fontWeight: 700 }}
                   >
-                    {releasingId === payout.id
+                    {releasingId === latestPendingPayout.id
                       ? <><Loader2 className="w-4 h-4 animate-spin" /> Confirming Settlement…</>
                       : <><CheckCircle className="w-4.5 h-4.5" /> Approve & Release {fmt$(releaseAmt)}</>}
                   </button>
                 </div>
               </div>
-            ))}
+            )}
 
             {/* Main grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20, alignItems: 'start' }}>
