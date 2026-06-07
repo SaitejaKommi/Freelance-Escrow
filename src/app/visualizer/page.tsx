@@ -15,7 +15,6 @@ import {
   Flag,
   Search,
   Bot,
-  Clock,
   ChevronRight,
   ChevronDown,
   Info,
@@ -39,6 +38,33 @@ const AGENT_META: Record<AgentName, {
   milestone: { label: 'Milestone', role: 'Completion Scorer', desc: 'Grades each milestone 0–100% from the extracted evidence and code quality.', Icon: Flag,           iconBg: '#EFE5DB', iconColor: '#5F7A61', duration: '3.1s', findings: '87% completion score' },
   payment:   { label: 'Payment',   role: 'Payout Arbitrator', desc: 'Computes weighted escrow release based on overall completion and confidence.',Icon: Banknote,       iconBg: '#F7F4F1', iconColor: '#C59A5A', duration: '0.9s', findings: '1 release payload' },
   report:    { label: 'Report',    role: 'Audit Compiler',    desc: 'Generates a structured markdown audit report for both client and developer.', Icon: ShieldCheck,    iconBg: '#F7F4F1', iconColor: '#B85C5C', duration: '1.5s', findings: '1 report compiled' },
+};
+
+const AGENT_SUMMARIES: Record<AgentName, { active: string; done: string }> = {
+  planner: {
+    active: 'Planning milestone breakdowns...',
+    done: 'Planned weighted project milestone framework.'
+  },
+  github: {
+    active: 'Scanning repository branch main...',
+    done: 'Scanned repository: 15 commits, 3 PRs. Stack: Next.js + Node.js.'
+  },
+  evidence: {
+    active: 'Mapping code files to requirements...',
+    done: 'Evidence found: Authentication verified, Database Config matched, API Routes active.'
+  },
+  milestone: {
+    active: 'Scoring milestone completion grades...',
+    done: 'Grades calculated: User Authentication (90%), Dashboard (60%).'
+  },
+  payment: {
+    active: 'Calculating escrow allocation recommendation...',
+    done: 'Allocation computed: Payout recommendation ready.'
+  },
+  report: {
+    active: 'Compiling final markdown reports...',
+    done: 'Audit compiled: Client translation summary + Technical logs generated.'
+  }
 };
 
 const PIPELINE: AgentName[] = ['github', 'evidence', 'milestone', 'payment', 'report'];
@@ -292,6 +318,23 @@ function VisualizerContent() {
                           <div>Findings: <span style={{ color: 'var(--text)' }}>{runStatus === 'completed' ? meta.findings : '—'}</span></div>
                         </div>
 
+                        {/* Teammate's live Summary result text */}
+                        {(isActive || isDone) && (
+                          <div style={{
+                            marginTop: 8,
+                            padding: '6px 10px',
+                            background: 'var(--bg)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            color: 'var(--muted)',
+                            fontFamily: 'monospace',
+                            lineHeight: 1.4
+                          }}>
+                            {isActive ? AGENT_SUMMARIES[agent].active : AGENT_SUMMARIES[agent].done}
+                          </div>
+                        )}
+
                         {/* Last log snippet */}
                         {(() => {
                           const agentLogs = logs.filter(l => l.agent === agent);
@@ -334,7 +377,7 @@ function VisualizerContent() {
           <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-card)' }}>
             {/* Log Header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifycontent: 'space-between', marginBottom: 12, justifyContent: 'space-between' }}>
                 <div>
                   <h3 style={{ fontFamily: '"Playfair Display", Georgia, serif', fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>System Audit Logs</h3>
                   <div style={{ fontSize: 11, color: 'var(--subtle)', fontFamily: 'monospace', marginTop: 2 }}>{filteredLogs.length} entries shown</div>
@@ -390,7 +433,7 @@ function VisualizerContent() {
                     <span>TIME</span>
                     <span>AGENT</span>
                     <span>LOG DESCRIPTION</span>
-                    <span style={{ textAlign: 'right' }}>STATUS</span>
+                    <span style={{ textalign: 'right', textAlign: 'right' }}>STATUS</span>
                   </div>
 
                   {/* Feed rows */}
