@@ -148,7 +148,22 @@ export default function NewEscrow() {
       });
       const d = await res.json();
       if (!d.success) { setError(d.error ?? 'Failed to create contract'); return; }
-      router.push(`/project/${d.data.project.id}`);
+      const projectId = d.data.project.id;
+
+      // Trigger the real MetaMask transaction
+      try {
+        const { depositToEscrow } = await import('@/lib/wallet');
+        await depositToEscrow(projectId, Number(escrowAmount));
+      } catch (depositErr: any) {
+        console.error(depositErr);
+        setError('Wallet transaction failed: ' + depositErr.message);
+        // Optionally, you might want to delete the project here or allow retry,
+        // but for now we stop the redirect and let the user know.
+        setLoading(false);
+        return;
+      }
+
+      router.push(`/project/${projectId}`);
     } catch { setError('Network error. Please try again.'); }
     finally { setLoading(false); }
   }

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "chain": "cd payments && npx hardhat node",
+    "deploy": "cd payments && npx hardhat ignition deploy ignition/modules/Escrow.ts --network monadTestnet",
+    "dev:full": "bunx concurrently  \"bun run deploy && bun run dev\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.2",
@@ -22,13 +25,16 @@
     "viem": "^2.21.54"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
     "@types/canvas-confetti": "^1.6.4",
     "@types/node": "^20.17.9",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^10.0.3",
     "eslint": "^9.16.0",
     "eslint-config-next": "15.0.3",
+    "hardhat": "^3.8.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.7.2"

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -17,13 +18,55 @@ const navItems = [
 ];
 
 function WalletButton() {
+  const [address, setAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getAddress = async () => {
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        const accounts = await (window as any).ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          setAddress(accounts[0]);
+        }
+      }
+    };
+    getAddress();
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length > 0) {
+        setAddress(accounts[0]);
+      } else {
+        setAddress(null);
+      }
+    };
+
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      (window as any).ethereum.on('accountsChanged', handleAccountsChanged);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
+  }, []);
+
+  const handleConnect = async () => {
+    try {
+      const { connectWallet } = await import('@/lib/wallet');
+      const { address: addr } = await connectWallet();
+      setAddress(addr);
+    } catch (e: any) {
+      alert('Failed to connect wallet: ' + e.message);
+    }
+  };
+
   return (
     <button
       className="wallet-btn"
-      onClick={() => alert('Wallet connection coming soon — integrate wagmi/viem here')}
+      onClick={handleConnect}
     >
       <Wallet className="w-3.5 h-3.5 flex-shrink-0" />
-      <span>Connect Wallet</span>
+      <span>{address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Connect Wallet'}</span>
     </button>
   );
 }

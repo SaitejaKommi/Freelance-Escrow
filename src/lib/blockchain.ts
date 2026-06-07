@@ -1,109 +1,116 @@
-// ─────────────────────────────────────────────
-// Monad blockchain service — real + simulated ledger
-// ─────────────────────────────────────────────
+import { createPublicClient, createWalletClient, http, formatEther, parseEther } from 'viem';
+import { monadTestnet } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+import { ESCROW_CONTRACT_ABI, ESCROW_CONTRACT_ADDRESS } from './contractABI';
 import type { BlockchainTx } from '@/lib/types';
 
-const TXS_KEY = 'escrow_blockchain_txs';
-const BAL_KEY = 'escrow_blockchain_balances';
+// Use Hardhat Account #0 as Arbiter for backend transactions
+const ARBITER_PRIVATE_KEY = "0xb18c4b6c3ad7eb9c01a3b71d3d52a0224ddb84d9232882961ec379b418d31681";
+const arbiterAccount = privateKeyToAccount(ARBITER_PRIVATE_KEY);
 
-function uid7() { return Math.random().toString(16).slice(2, 10); }
-function txHash() { return '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join(''); }
-function blockNum() { return 1_200_000 + Math.floor(Date.now() / 10_000); }
+const publicClient = createPublicClient({
+  chain: monadTestnet,
+  transport: http(),
+});
 
-function loadTxs(): BlockchainTx[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(TXS_KEY) ?? '[]'); } catch { return []; }
-}
-function saveTxs(txs: BlockchainTx[]) {
-  if (typeof window !== 'undefined') localStorage.setItem(TXS_KEY, JSON.stringify(txs));
-}
-
-function loadBalances() {
-  if (typeof window === 'undefined') return { client: 1000, freelancer: 250, contract: 0 };
-  try { return JSON.parse(localStorage.getItem(BAL_KEY) ?? 'null') ?? { client: 1000, freelancer: 250, contract: 0 }; } catch { return { client: 1000, freelancer: 250, contract: 0 }; }
-}
-function saveBalances(b: { client: number; freelancer: number; contract: number }) {
-  if (typeof window !== 'undefined') localStorage.setItem(BAL_KEY, JSON.stringify(b));
-}
+const walletClient = createWalletClient({
+  account: arbiterAccount,
+  chain: monadTestnet,
+  transport: http(),
+});
 
 export const blockchain = {
   async getTransactions(): Promise<BlockchainTx[]> {
-    return [...loadTxs()].reverse();
+    try {
+      const blockNumber = await publicClient.getBlockNumber();
+      const logs = await publicClient.getLogs({
+        address: ESCROW_CONTRACT_ADDRESS,
+        fromBlock: blockNumber > 90n ? blockNumber - 90n : 0n,
+        toBlock: blockNumber,
+      });
+
+      const txs = await Promise.all(logs.map(async (log) => {
+        const tx = await publicClient.getTransaction({ hash: log.transactionHash! });
+        const receipt = await publicClient.getTransactionReceipt({ hash: log.transactionHash! });
+        return {
+          hash: log.transactionHash!,
+          blockNumber: Number(log.blockNumber),
+          from: tx.from,
+          to: tx.to || ESCROW_CONTRACT_ADDRESS,
+          value: formatEther(tx.value),
+          method: 'EscrowEvent', // Simplified mapping, could parse log topic
+          status: receipt.status === 'success' ? 'success' : 'failed',
+          timestamp: new Date().toISOString(),
+          gasUsed: Number(receipt.gasUsed),
+        } as BlockchainTx;
+      }));
+      return txs.reverse();
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
   },
 
   async getBalances() {
-    return loadBalances();
+    try {
+      const balance = await publicClient.getBalance({ address: ESCROW_CONTRACT_ADDRESS });
+      return {
+        client: 1000,
+        freelancer: 250,
+        contract: Number(formatEther(balance))
+      };
+    } catch {
+      return { client: 1000, freelancer: 250, contract: 0 };
+    }
   },
 
-  async deposit(projectId: string, amount: number): Promise<BlockchainTx> {
-    const bal = loadBalances();
-    const available = Math.min(amount, bal.client);
-    bal.client   -= available;
-    bal.contract += available;
-    saveBalances(bal);
+  async release(projectId: string, amount: number, freelancerAddress: `0x${string}` = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'): Promise<BlockchainTx> {
+    const { request } = await publicClient.simulateContract({
+      account: arbiterAccount,
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_CONTRACT_ABI,
+      functionName: 'release',
+      args: [projectId, freelancerAddress],
+    });
 
-    const tx: BlockchainTx = {
-      hash:        txHash(),
-      blockNumber: blockNum(),
-      from:        '0xClient…' + uid7(),
-      to:          '0xEscrow…' + uid7(),
-      value:       available.toFixed(2),
-      method:      'depositFunds()',
-      status:      'success',
-      timestamp:   new Date().toISOString(),
-      gasUsed:     Math.floor(Math.random() * 15000) + 21000,
+    const hash = await walletClient.writeContract(request);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+    return {
+      hash,
+      blockNumber: Number(receipt.blockNumber),
+      from: arbiterAccount.address,
+      to: ESCROW_CONTRACT_ADDRESS,
+      value: amount.toString(),
+      method: 'release()',
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      gasUsed: Number(receipt.gasUsed),
     };
-    const txs = loadTxs();
-    txs.push(tx);
-    saveTxs(txs);
-    return tx;
-  },
-
-  async release(projectId: string, amount: number): Promise<BlockchainTx> {
-    const bal = loadBalances();
-    const available = Math.min(amount, bal.contract);
-    bal.contract   -= available;
-    bal.freelancer += available;
-    saveBalances(bal);
-
-    const tx: BlockchainTx = {
-      hash:        txHash(),
-      blockNumber: blockNum(),
-      from:        '0xEscrow…' + uid7(),
-      to:          '0xFreelancer…' + uid7(),
-      value:       available.toFixed(2),
-      method:      'releaseFunds()',
-      status:      'success',
-      timestamp:   new Date().toISOString(),
-      gasUsed:     Math.floor(Math.random() * 12000) + 21000,
-    };
-    const txs = loadTxs();
-    txs.push(tx);
-    saveTxs(txs);
-    return tx;
   },
 
   async refund(projectId: string, amount: number): Promise<BlockchainTx> {
-    const bal = loadBalances();
-    const available = Math.min(amount, bal.contract);
-    bal.contract -= available;
-    bal.client   += available;
-    saveBalances(bal);
+    const { request } = await publicClient.simulateContract({
+      account: arbiterAccount,
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_CONTRACT_ABI,
+      functionName: 'refund',
+      args: [projectId],
+    });
 
-    const tx: BlockchainTx = {
-      hash:        txHash(),
-      blockNumber: blockNum(),
-      from:        '0xEscrow…' + uid7(),
-      to:          '0xClient…' + uid7(),
-      value:       available.toFixed(2),
-      method:      'refundFunds()',
-      status:      'success',
-      timestamp:   new Date().toISOString(),
-      gasUsed:     Math.floor(Math.random() * 12000) + 21000,
+    const hash = await walletClient.writeContract(request);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+    return {
+      hash,
+      blockNumber: Number(receipt.blockNumber),
+      from: arbiterAccount.address,
+      to: ESCROW_CONTRACT_ADDRESS,
+      value: amount.toString(),
+      method: 'refund()',
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      gasUsed: Number(receipt.gasUsed),
     };
-    const txs = loadTxs();
-    txs.push(tx);
-    saveTxs(txs);
-    return tx;
   },
 };

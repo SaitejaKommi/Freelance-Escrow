@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-263e0fab763392ddc1f2148d33ed41267a6cc43e",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.8.0"
+  },
+  "userSourceNameMap": {
+    "contracts/FreelanceEscrow.sol": "project/contracts/FreelanceEscrow.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/FreelanceEscrow.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\ncontract FreelanceEscrow {\n    address public arbiter;\n\n    struct Escrow {\n        address client;\n        address freelancer;\n        uint256 amount;\n        bool isFunded;\n        bool isReleased;\n        bool isRefunded;\n    }\n\n    mapping(string => Escrow) public escrows;\n\n    event Deposited(string projectId, address client, uint256 amount);\n    event Released(string projectId, address freelancer, uint256 amount);\n    event Refunded(string projectId, address client, uint256 amount);\n\n    modifier onlyArbiter() {\n        require(msg.sender == arbiter, \"Only the AI arbiter can call this function\");\n        _;\n    }\n\n    constructor(address _arbiter) {\n        require(_arbiter != address(0), \"Arbiter address cannot be zero\");\n        arbiter = _arbiter;\n    }\n\n    function deposit(string memory projectId) public payable {\n        require(msg.value > 0, \"Deposit amount must be greater than zero\");\n        require(bytes(projectId).length > 0, \"Project ID cannot be empty\");\n        \n        Escrow storage escrow = escrows[projectId];\n        require(!escrow.isFunded, \"Escrow already funded for this project\");\n\n        escrow.client = msg.sender;\n        escrow.amount = msg.value;\n        escrow.isFunded = true;\n\n        emit Deposited(projectId, msg.sender, msg.value);\n    }\n\n    // Set freelancer address later when they accept or when depositing\n    function setFreelancer(string memory projectId, address _freelancer) public {\n         Escrow storage escrow = escrows[projectId];\n         require(escrow.isFunded, \"Escrow not funded\");\n         require(msg.sender == escrow.client, \"Only client can set freelancer\");\n         require(escrow.freelancer == address(0), \"Freelancer already set\");\n         escrow.freelancer = _freelancer;\n    }\n\n    function release(string memory projectId, address _freelancer) public onlyArbiter {\n        Escrow storage escrow = escrows[projectId];\n        require(escrow.isFunded, \"Escrow is not funded\");\n        require(!escrow.isReleased, \"Funds already released\");\n        require(!escrow.isRefunded, \"Funds already refunded\");\n        require(_freelancer != address(0), \"Invalid freelancer address\");\n\n        escrow.isReleased = true;\n        // In this flow, the arbiter defines who the freelancer is upon release\n        escrow.freelancer = _freelancer; \n\n        uint256 amount = escrow.amount;\n        \n        (bool success, ) = _freelancer.call{value: amount}(\"\");\n        require(success, \"Transfer failed\");\n\n        emit Released(projectId, _freelancer, amount);\n    }\n\n    function refund(string memory projectId) public onlyArbiter {\n        Escrow storage escrow = escrows[projectId];\n        require(escrow.isFunded, \"Escrow is not funded\");\n        require(!escrow.isReleased, \"Funds already released\");\n        require(!escrow.isRefunded, \"Funds already refunded\");\n\n        escrow.isRefunded = true;\n        uint256 amount = escrow.amount;\n        address client = escrow.client;\n\n        (bool success, ) = client.call{value: amount}(\"\");\n        require(success, \"Refund failed\");\n\n        emit Refunded(projectId, client, amount);\n    }\n\n    function getEscrow(string memory projectId) public view returns (\n        address client,\n        address freelancer,\n        uint256 amount,\n        bool isFunded,\n        bool isReleased,\n        bool isRefunded\n    ) {\n        Escrow memory e = escrows[projectId];\n        return (e.client, e.freelancer, e.amount, e.isFunded, e.isReleased, e.isRefunded);\n    }\n}\n"
+      }
+    }
+  }
+}
