@@ -10,6 +10,122 @@ type PageData = { project: Project; milestones: Milestone[]; repository: any; re
 function fmt$(n: number) { return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 function scoreColor(s: number) { return s === 0 ? '#33334a' : s >= 80 ? '#22c55e' : s >= 50 ? '#7B68EE' : '#f59e0b'; }
 
+function renderMarkdown(md: string) {
+  if (!md) return '';
+  
+  // Basic escaping for safety while allowing HTML tags we generate
+  let text = md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Inline formatting: code and bold
+  text = text.replace(/`(.*?)`/g, '<code class="md-code">$1</code>');
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="md-strong">$1</strong>');
+  
+  const lines = text.split('\n');
+  const processed: string[] = [];
+  let inTable = false;
+  let tableHeaders: string[] = [];
+  let tableRows: string[][] = [];
+
+  const flushTable = () => {
+    if (!tableHeaders.length) return '';
+    let tableHtml = '<div class="md-table-container"><table class="md-table"><thead><tr>';
+    tableHeaders.forEach(h => {
+      tableHtml += `<th>${h}</th>`;
+    });
+    tableHtml += '</tr></thead><tbody>';
+    tableRows.forEach(row => {
+      tableHtml += '<tr>';
+      row.forEach(cell => {
+        tableHtml += `<td>${cell}</td>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table></div>';
+    inTable = false;
+    tableHeaders = [];
+    tableRows = [];
+    return tableHtml;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    
+    // Check for tables
+    if (line.startsWith('|') && line.endsWith('|')) {
+      const cells = line.split('|').map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      
+      // Divider line
+      if (line.includes('---')) {
+        continue;
+      }
+      
+      if (!inTable) {
+        inTable = true;
+        tableHeaders = cells;
+      } else {
+        tableRows.push(cells);
+      }
+      continue;
+    } else {
+      if (inTable) {
+        processed.push(flushTable());
+      }
+    }
+
+    // Headers
+    if (line.startsWith('# ')) {
+      processed.push(`<h1 class="md-h1">${line.slice(2)}</h1>`);
+    } else if (line.startsWith('## ')) {
+      processed.push(`<h2 class="md-h2">${line.slice(3)}</h2>`);
+    } else if (line.startsWith('### ')) {
+      processed.push(`<h3 class="md-h3">${line.slice(4)}</h3>`);
+    } else if (line.startsWith('#### ')) {
+      processed.push(`<h4 class="md-h3" style="color: var(--vl); font-size: 13px; margin-top: 14px; margin-bottom: 6px;">${line.slice(5)}</h4>`);
+    } else if (line.startsWith('##### ')) {
+      processed.push(`<h5 class="md-h3" style="color: var(--i1); font-size: 12px; margin-top: 12px; margin-bottom: 4px;">${line.slice(6)}</h5>`);
+    } else if (line.startsWith('###### ')) {
+      processed.push(`<h6 class="md-h3" style="color: var(--i2); font-size: 11px; margin-top: 10px; margin-bottom: 4px;">${line.slice(7)}</h6>`);
+    }
+    // Blockquote
+    else if (line.startsWith('> ')) {
+      processed.push(`<blockquote class="md-blockquote">${line.slice(2)}</blockquote>`);
+    }
+    // Horizontal rule
+    else if (line === '---') {
+      processed.push('<hr class="md-hr" />');
+    }
+    // Bullet list
+    else if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('+ ')) {
+      const content = line.startsWith('- ') || line.startsWith('* ') || line.startsWith('+ ') ? line.slice(2) : line;
+      processed.push(`<li class="md-li">${content}</li>`);
+    }
+    // Numbered list
+    else if (/^\d+\.\s+(.*)/.test(line)) {
+      const match = line.match(/^\d+\.\s+(.*)/);
+      processed.push(`<li class="md-li" style="list-style-type: decimal;">${match ? match[1] : line}</li>`);
+    }
+    // Empty line
+    else if (line === '') {
+      // Just ignore or separate with normal line spacing
+    }
+    // Normal line
+    else {
+      processed.push(`<p style="margin-bottom: 8px;">${line}</p>`);
+    }
+  }
+
+  if (inTable) {
+    processed.push(flushTable());
+  }
+
+  return processed.join('\n');
+}
+
+
+
 function ScoreRing({ score, size = 70 }: { score: number; size?: number }) {
   const sw = 4, r = (size - sw * 2) / 2, circ = 2 * Math.PI * r;
   const color = scoreColor(score);
@@ -254,7 +370,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20 }}>
 
             {/* Left: Milestone list */}
-            <div>
+            <div style={{ position: 'sticky', top: '10px', height: 'fit-content', alignSelf: 'start' }}>
               <div className="sect-label">MILESTONES · {milestones.length} TOTAL</div>
 
               {/* Summary counters */}
@@ -413,11 +529,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       </button>
                     ))}
                   </div>
-                  <div className="card" style={{ padding: 20 }}>
-                    <div style={{ fontSize: 13, color: 'var(--i2)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                      {reportView === 'client' ? (clientTranslation || technicalReport) : technicalReport}
-                    </div>
+                  <div className="card" style={{ padding: '24px 30px' }}>
+                    <div 
+                      style={{ fontSize: 13, color: 'var(--i2)', lineHeight: 1.8 }}
+                      dangerouslySetInnerHTML={{
+                        __html: renderMarkdown(
+                          reportView === 'client' ? (clientTranslation || technicalReport) : technicalReport
+                        )
+                      }}
+                    />
                   </div>
+
                 </div>
               )}
             </div>
