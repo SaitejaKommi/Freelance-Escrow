@@ -133,7 +133,7 @@ export default function LandingPage() {
       }}>
         {/* Logo */}
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--text)', display: 'flex', alignItems: 'center', justifycontent: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
               <path d="M4 2.5V15.5M4 9L13.5 2.5M4 9L13.5 15.5" stroke="var(--bg-card)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
