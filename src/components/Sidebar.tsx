@@ -1,66 +1,85 @@
 'use client';
-import Link         from 'next/link';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShieldCheck, LayoutDashboard, Plus, Cpu, BookOpen, Zap } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, Bot, Lock, BarChart3 } from 'lucide-react';
 
 const navItems = [
-  { href: '/',          icon: LayoutDashboard, label: 'Dashboard'  },
-  { href: '/new',       icon: Plus,            label: 'New Project' },
-  { href: '/visualizer', icon: Cpu,            label: 'AI Monitor'  },
+  { href: '/',           icon: LayoutDashboard, label: 'Overview'      },
+  { href: '/new',        icon: FolderOpen,      label: 'New Contract'  },
+  { href: '/visualizer', icon: Bot,             label: 'AI Engine'     },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 flex-shrink-0 flex flex-col h-full font-sans"
-      style={{ background: '#0e0c0a', borderRight: '1px solid #2e2b26' }}>
-
+    <aside className="sidebar">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-3 px-5 py-4"
-        style={{ borderBottom: '1px solid #2e2b26' }}>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(218,119,86,0.15)', border: '1px solid rgba(218,119,86,0.3)' }}>
-          <ShieldCheck className="w-4 h-4" style={{ color: '#DA7756' }} />
+      <Link href="/" className="sb-logo">
+        <div className="sb-logo-icon">
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+            <path d="M16 2L28 8.5V23.5L16 30L4 23.5V8.5L16 2Z"
+              fill="rgba(123,104,238,0.2)" stroke="#7B68EE" strokeWidth="1.5" />
+            <path d="M16 9L22 12.5V19.5L16 23L10 19.5V12.5L16 9Z"
+              fill="rgba(123,104,238,0.5)" />
+            <circle cx="16" cy="16" r="3" fill="#7B68EE" />
+          </svg>
         </div>
         <div>
-          <div className="font-semibold text-sm" style={{ color: '#F5ECD7' }}>TrustlessEscrow</div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <div className="pulse-dot" style={{ width: 6, height: 6 }} />
-            <span className="font-mono text-xs" style={{ color: '#5a5248' }}>Monad Devnet</span>
+          <div className="sb-logo-text">TrustlessEscrow</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+            <span className="dot dot-green" style={{ width: 5, height: 5 }} />
+            <span className="font-mono" style={{ fontSize: 10, color: 'var(--i4)' }}>Monad Devnet</span>
           </div>
         </div>
       </Link>
 
-      {/* Pixel grass divider */}
-      <div className="px-div" style={{ margin: 0, height: 2, opacity: 0.35 }} />
-
       {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5">
+      <div className="sb-section">NAVIGATION</div>
+      <nav style={{ flex: 1, padding: '4px 0' }}>
         {navItems.map(item => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
           return (
-            <Link key={item.href} href={item.href}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-100"
-              style={{
-                color:      active ? '#DA7756' : '#9a8f82',
-                background: active ? 'rgba(218,119,86,0.08)' : 'transparent',
-                border:     `1px solid ${active ? 'rgba(218,119,86,0.2)' : 'transparent'}`,
-              }}
-              onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = '#F5ECD7'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; } }}
-              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = '#9a8f82'; (e.currentTarget as HTMLElement).style.background = 'transparent'; } }}>
-              <item.icon className="w-4 h-4 flex-shrink-0" />
+            <Link key={item.href} href={item.href} className={`sb-item${active ? ' active' : ''}`}>
+              <item.icon style={{ width: 15, height: 15, flexShrink: 0, opacity: active ? 1 : 0.6 }} />
               {item.label}
-              {active && <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#DA7756' }} />}
+              {active && (
+                <span style={{
+                  marginLeft: 'auto', width: 5, height: 5, borderRadius: '50%',
+                  background: 'var(--vl)', flexShrink: 0,
+                }} />
+              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* Footer info strip */}
-      <div style={{ borderTop: '1px solid #2e2b26', padding: 12 }}>
-        <div className="code-flavor text-xs" style={{ padding: '6px 10px' }}>
-          <span className="kw">const</span> <span className="fn">audit</span> = <span className="fn">AI</span>(<span className="st">"github"</span>)<div className="term-cursor inline-block" />
+      {/* Bottom status */}
+      <div className="sb-bottom">
+        <div className="ai-status-pill">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span className="dot dot-green" style={{ width: 5, height: 5 }} />
+            <span className="font-mono" style={{ fontSize: 9, color: 'var(--em)', letterSpacing: '0.08em' }}>
+              AI ENGINE LIVE
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--i3)' }}>
+            Verification ready
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px' }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--v), var(--teal))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0,
+          }}>
+            ES
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--i2)' }}>Escrow Platform</div>
+            <div style={{ fontSize: 10, color: 'var(--i4)' }}>Pro Plan</div>
+          </div>
         </div>
       </div>
     </aside>
